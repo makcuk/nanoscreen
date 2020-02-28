@@ -15,7 +15,6 @@ while 1:
 
 im = p.close()
 
-fnt = ImageFont.truetype('Arial.ttf', 25)
 fnt_s = ImageFont.load('spleen-5x8.pil')
 fnt_b = ImageFont.load("spleen-16x32.pil")
 d = ImageDraw.Draw(im)
@@ -27,5 +26,5 @@ d.text((95, 7), c_date, font=fnt_s, fill=(246,11,11))
 d.text((95, 21), c_day, font=fnt_s, fill=(246,11,11))
 d.text((95, 35), strftime("%Y", localtime()), font=fnt_s, fill=(246,11,11))
 #d.text((30, 55), "15:09", font=fnt_b, fill=(246,11,11))
-im.save('dash.bmp')
+im.save('page0.bmp')
 

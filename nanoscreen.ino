@@ -26,17 +26,26 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <vfs_api.h>
 #include <FS.h>
 #include <FSImpl.h>
-
 #include <SPIFFS.h>
-
 #include <TFT_eSPI.h>
 #include <WiFi.h>
 #include <WiFiClient.h>
 #include <WebServer.h>
 #include <ESPmDNS.h>
+#include <Button2.h>
 
+enum pages{page0, page1, page2, page3, page4, page5, page6, page7, page8, page9};
+
+int current_page = page0;
 
 #define FORMAT_SPIFFS_IF_FAILED false
+#define BUTTON_1        35
+#define BUTTON_2        0
+
+Button2 btn1(BUTTON_1);
+Button2 btn2(BUTTON_2);
+int rightClick = false;
+int leftClick = false;
 
 unsigned int check_file_size = 0;
 
@@ -45,8 +54,8 @@ TFT_eSPI tft = TFT_eSPI();           // TFT object
 TFT_eSprite spr = TFT_eSprite(&tft); // Sprite object
 
 const char* host = "esp32-display";
-const char* ssid = "...";
-const char* password = "....";
+const char* ssid = "gk62";
+const char* password = "prevedmedved";
 
 bool new_upload = true;
 bool new_upload_displayed = false;
@@ -61,7 +70,7 @@ void setup() {
   tft.setRotation(0);  // 0 & 2 Portrait. 1 & 3 landscape
   tft.fillScreen(TFT_BLACK);
 
- 
+  button_init();
   Serial.println();
   Serial.println("Booting Sketch...");
   if(!SPIFFS.begin(FORMAT_SPIFFS_IF_FAILED)){
@@ -83,11 +92,12 @@ void setup() {
     }, []() {
 
       HTTPUpload& upload = server.upload();
+      String new_file_name = upload.filename.c_str();
       if (new_upload) {
-        SPIFFS.remove("/default.bmp");
+        SPIFFS.remove("/"+new_file_name);
         new_upload = false;
       }
-      File file = SPIFFS.open("/default.bmp", FILE_APPEND);
+      File file = SPIFFS.open("/"+new_file_name, FILE_APPEND);
       if (upload.status == UPLOAD_FILE_START) {
         Serial.setDebugOutput(true);
         Serial.printf("Received: %s\n", upload.filename.c_str());
@@ -118,11 +128,62 @@ void setup() {
 
 void loop(void) {
   //
+  button_loop();
   server.handleClient();
+  if (rightClick) {
+      current_page +=1;
+      if (current_page > 9) {
+        current_page = page0;
+      }
+      String page = "/page"+String(current_page)+".bmp";
+      if(!SPIFFS.exists(page)) {
+        current_page -= 1;
+      }
+      rightClick = false;
+      new_upload_displayed = false;
+  }
+  if (leftClick) {
+      current_page -= 1;
+     
+      String page = "/page"+String(current_page)+".bmp";
+      if(!SPIFFS.exists(page)) {
+        current_page += 1;
+      }
+      if (current_page < 0) {
+        current_page = page9;
+      }
+      leftClick = false;
+      new_upload_displayed = false;
+  }
+  
   if (!new_upload_displayed) {
+    size_t needed = snprintf(NULL, 0, "/page%d.bmp", current_page) + 1;
+    char *page = (char *) malloc(needed);
+    sprintf(page,"/page%d.bmp", current_page);
    // tft.fillScreen(TFT_BLACK);
-    drawBmp("/default.bmp", 0, 0);
+    Serial.println(page);
+    drawBmp(page, 0, 0);
     new_upload_displayed = true;
   }
   delay(1);
+}
+
+
+void button_init()
+{
+    btn1.setPressedHandler([](Button2 & b) {
+        Serial.println("Right");
+        rightClick = true;
+    });
+
+    btn2.setPressedHandler([](Button2 & b) {
+        Serial.println("Left");
+        leftClick = true;
+    });
+}
+
+void button_loop()
+{
+    btn1.loop();
+    btn2.loop();
 }
