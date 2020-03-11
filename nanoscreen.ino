@@ -1,3 +1,4 @@
+
 /*
  * Copyright (c) 2020, Max Speransky
 
@@ -33,6 +34,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <WebServer.h>
 #include <ESPmDNS.h>
 #include <Button2.h>
+#include <Shell.h>
 
 enum pages{page0, page1, page2, page3, page4, page5, page6, page7, page8, page9};
 
@@ -54,8 +56,8 @@ TFT_eSPI tft = TFT_eSPI();           // TFT object
 TFT_eSprite spr = TFT_eSprite(&tft); // Sprite object
 
 const char* host = "esp32-display";
-const char* ssid = "gk62";
-const char* password = "prevedmedved";
+char *ssid = "test";
+char *password = "test";
 
 bool new_upload = true;
 bool new_upload_displayed = false;
@@ -65,6 +67,10 @@ const char* serverIndex = "<form method='POST' action='/update' enctype='multipa
 
 void setup() {
   Serial.begin(115200);
+  delay(1000);
+
+  shell_init(shell_reader, shell_writer, 0);
+  shell_register(set_wifi, PSTR("set_wifi"));
   
   tft.begin();
   tft.setRotation(0);  // 0 & 2 Portrait. 1 & 3 landscape
@@ -77,7 +83,17 @@ void setup() {
         Serial.println("SPIFFS Mount Failed");
         return;
     }
+  ssid = load_file("/ssid");
+  password = load_file("/password");
+  
   WiFi.mode(WIFI_AP_STA);
+  if (!ssid) {
+    ssid = "test";
+    password = "test";
+    Serial.println("Wi-fi settings not found, using default test/test");
+  }
+
+  Serial.printf("%s:%s\n", ssid, password);
   WiFi.begin(ssid, password);
   if (WiFi.waitForConnectResult() == WL_CONNECTED) {
     MDNS.begin(host);
@@ -125,10 +141,30 @@ void setup() {
   }
 }
 
+int set_wifi(int argc, char** argv)
+{
+  shell_println("Setting wifi");
+  
+  if (argc != 3 ) {
+    shell_println("Syntax: set_wifi <ssid> <password>");
+  } else {
+    shell_println(argv[1]);
+    shell_println(argv[2]);
+    File ssid = SPIFFS.open("/ssid", "wb");
+    File password = SPIFFS.open("/password", "wb");
+    ssid.print(argv[1]);
+    password.print(argv[2]);
+    ssid.close();
+    password.close();
+    ESP.restart();
+  }
+  return SHELL_RET_SUCCESS;
+}
 
 void loop(void) {
   //
   button_loop();
+  shell_task();
   server.handleClient();
   if (rightClick) {
       current_page +=1;
@@ -186,4 +222,51 @@ void button_loop()
 {
     btn1.loop();
     btn2.loop();
+}
+
+int shell_reader(char * data)
+{
+  // Wrapper for Serial.read() method
+  if (Serial.available()) {
+    *data = Serial.read();
+    return 1;
+  }
+  return 0;
+}
+
+/**
+ * Function to write data to serial port
+ * Functions to write to physical media should use this prototype:
+ * void my_writer_function(char data)
+ */
+void shell_writer(char data)
+{
+  // Wrapper for Serial.write() method
+  Serial.write(data);
+}
+
+char *load_file(char *fname) 
+{
+char * buffer = 0;
+unsigned long length;
+fs::File f = SPIFFS.open(fname, "rb");
+
+if (f.available())
+{
+  Serial.println("In f()");
+  length = f.size();
+  buffer = (char *) malloc (length+1);
+  if (buffer)
+  {
+    f.read((unsigned char *)buffer, length);
+  }
+  buffer[length] = '\0';
+  f.close();
+}
+
+if (buffer)
+{
+  return buffer;
+}
+return NULL;
 }
