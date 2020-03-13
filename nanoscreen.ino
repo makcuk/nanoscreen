@@ -36,13 +36,15 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <Button2.h>
 #include <Shell.h>
 
-enum pages{page0, page1, page2, page3, page4, page5, page6, page7, page8, page9};
-
-int current_page = page0;
-
 #define FORMAT_SPIFFS_IF_FAILED false
 #define BUTTON_1        35
 #define BUTTON_2        0
+
+/* globals */
+
+enum pages{page0, page1, page2, page3, page4, page5, page6, page7, page8, page9};
+
+int current_page = page0;
 
 Button2 btn1(BUTTON_1);
 Button2 btn2(BUTTON_2);
@@ -52,7 +54,6 @@ int leftClick = false;
 unsigned int check_file_size = 0;
 
 TFT_eSPI tft = TFT_eSPI();           // TFT object
-
 TFT_eSprite spr = TFT_eSprite(&tft); // Sprite object
 
 const char* host = "esp32-display";
@@ -67,11 +68,8 @@ const char* serverIndex = "<form method='POST' action='/update' enctype='multipa
 
 void setup() {
   Serial.begin(115200);
-  delay(1000);
-
-  shell_init(shell_reader, shell_writer, 0);
-  shell_register(set_wifi, PSTR("set_wifi"));
   
+
   tft.begin();
   tft.setRotation(0);  // 0 & 2 Portrait. 1 & 3 landscape
   tft.fillScreen(TFT_BLACK);
@@ -91,9 +89,16 @@ void setup() {
     ssid = "test";
     password = "test";
     Serial.println("Wi-fi settings not found, using default test/test");
+  } else {
+    Serial.println("Wi-Fi settings found, connecting");
   }
 
-  Serial.printf("%s:%s\n", ssid, password);
+  delay(1000);
+  shell_init(shell_reader, shell_writer, 0);
+  shell_register(set_wifi, PSTR("set_wifi"));
+  shell_register(show_storage, PSTR("show_storage"));
+  shell_register(show_wifi, PSTR("show_wifi"));
+
   WiFi.begin(ssid, password);
   if (WiFi.waitForConnectResult() == WL_CONNECTED) {
     MDNS.begin(host);
@@ -104,7 +109,6 @@ void setup() {
     server.on("/update", HTTP_POST, []() {
       server.sendHeader("Connection", "close");
       server.send(200, "text/plain", "OK");
-   //   ESP.restart();
     }, []() {
 
       HTTPUpload& upload = server.upload();
@@ -141,6 +145,8 @@ void setup() {
   }
 }
 
+
+/* shell commands begins */
 int set_wifi(int argc, char** argv)
 {
   shell_println("Setting wifi");
@@ -161,6 +167,32 @@ int set_wifi(int argc, char** argv)
   return SHELL_RET_SUCCESS;
 }
 
+int show_storage(int argc, char **argv)
+{
+  shell_println("SPIFFS drive contents: ");
+  File root = SPIFFS.open("/");
+ 
+  File file = root.openNextFile();
+ 
+  while(file){
+      shell_println(file.name());
+      file = root.openNextFile();
+  }
+}
+
+int show_wifi(int argc, char **argv)
+{
+  shell_println("Wi-Fi settings: ");
+  char *ssid = load_file("/ssid");
+  char *password = load_file("/password");
+
+  if(ssid && password) {
+    Serial.printf("SSID: %s, password: %s\n", ssid, password);
+  } else {
+    shell_println("No Wi-Fi configuration, use set_wifi <ssid> <password> to populate");
+  }
+
+}
 void loop(void) {
   //
   button_loop();
@@ -197,7 +229,7 @@ void loop(void) {
     char *page = (char *) malloc(needed);
     sprintf(page,"/page%d.bmp", current_page);
    // tft.fillScreen(TFT_BLACK);
-    Serial.println(page);
+    //Serial.println(page);
     drawBmp(page, 0, 0);
     new_upload_displayed = true;
   }
@@ -208,12 +240,12 @@ void loop(void) {
 void button_init()
 {
     btn1.setPressedHandler([](Button2 & b) {
-        Serial.println("Right");
+        //Serial.println("Right");
         rightClick = true;
     });
 
     btn2.setPressedHandler([](Button2 & b) {
-        Serial.println("Left");
+        //Serial.println("Left");
         leftClick = true;
     });
 }
@@ -234,11 +266,6 @@ int shell_reader(char * data)
   return 0;
 }
 
-/**
- * Function to write data to serial port
- * Functions to write to physical media should use this prototype:
- * void my_writer_function(char data)
- */
 void shell_writer(char data)
 {
   // Wrapper for Serial.write() method
@@ -253,7 +280,6 @@ fs::File f = SPIFFS.open(fname, "rb");
 
 if (f.available())
 {
-  Serial.println("In f()");
   length = f.size();
   buffer = (char *) malloc (length+1);
   if (buffer)
